@@ -1,0 +1,595 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OCR Image với Server AI</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css">
+    <style>
+        .container { max-width: 900px; }
+        #resultContainer { display: none; }
+        #resultText { height: 400px; overflow-y: auto; }
+        #logArea { height: 150px; overflow-y: auto; background-color: #f8f9fa; padding: 10px; border-radius: 5px; }
+        .progress { height: 25px; }
+        .hardware-id-container { 
+            border: 1px solid #dee2e6; 
+            border-radius: 5px; 
+            padding: 15px; 
+            margin-bottom: 20px; 
+        }
+        .social-icon {
+            font-size: 1.5rem;
+            margin-right: 10px;
+            color: #6c757d;
+            transition: color 0.3s;
+        }
+        .social-icon:hover {
+            color: #0d6efd;
+        }
+        .tab-content {
+            padding-top: 20px;
+        }
+        .author-card {
+            border: none;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+        }
+        .author-card .card-header {
+            background-color: #f8f9fa;
+            border-bottom: none;
+        }
+        .nav-tabs .nav-link {
+            font-weight: 500;
+        }
+        .nav-tabs .nav-link.active {
+            border-bottom: 3px solid #0d6efd;
+        }
+        /* Toast notification style */
+        .toast {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            z-index: 1050;
+        }
+        #imagePreview {
+            max-width: 100%;
+            max-height: 300px;
+            margin-top: 15px;
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <div class="container my-4">
+        <h1 class="text-center mb-4">OCR Image với Server AI</h1>
+        
+        <ul class="nav nav-tabs mb-4" id="myTab" role="tablist">
+            <li class="nav-item" role="presentation">
+                <button class="nav-link active" id="home-tab" data-bs-toggle="tab" data-bs-target="#home-tab-pane" type="button" role="tab" aria-controls="home-tab-pane" aria-selected="true">
+                    <i class="bi bi-house-door"></i> Trang chính
+                </button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" id="author-tab" data-bs-toggle="tab" data-bs-target="#author-tab-pane" type="button" role="tab" aria-controls="author-tab-pane" aria-selected="false">
+                    <i class="bi bi-person"></i> Thông tin tác giả
+                </button>
+            </li>
+        </ul>
+        
+        <div class="tab-content" id="myTabContent">
+            <!-- Tab 1: Main Application -->
+            <div class="tab-pane fade show active" id="home-tab-pane" role="tabpanel" aria-labelledby="home-tab" tabindex="0">
+                <!-- Hardware ID Section -->
+                <div class="hardware-id-container">
+                    <h4>Hardware ID</h4>
+                    <div class="row mb-2">
+                        <div class="col">
+                            <input type="text" id="hardwareId" class="form-control" readonly>
+                        </div>
+                    </div>
+                    <div class="row">
+                        <div class="col">
+                            <div id="activationStatus" class="alert alert-warning">
+                                Trạng thái: CHƯA KÍCH HOẠT
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- File Upload Section -->
+                <div class="card mb-4">
+                    <div class="card-header">
+                        <h5 class="mb-0">Chọn file hình ảnh</h5>
+                    </div>
+                    <div class="card-body">
+                        <form id="uploadForm">
+                            <div class="mb-3">
+                                <input class="form-control" type="file" id="imageFile" accept="image/*" disabled>
+                                <div id="pasteZone" class="alert alert-info mt-2 text-center">
+                                    <i class="bi bi-clipboard"></i> Hoặc dán hình ảnh (Ctrl+V) trực tiếp vào đây
+                                </div>
+                                <div id="fileInfo" class="form-text">Chưa chọn file nào</div>
+                                <img id="imagePreview" class="img-fluid rounded mx-auto d-block" alt="Preview">
+                            </div>
+                            <div class="d-grid">
+                                <button type="submit" class="btn btn-primary" id="processBtn" disabled>Xử lý OCR</button>
+                            </div>
+                        </form>
+
+                        <div class="mt-3">
+                            <div class="progress mb-2">
+                                <div class="progress-bar" id="progressBar" role="progressbar" style="width: 0%;" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100">0%</div>
+                            </div>
+                            <div id="statusText" class="text-center">Sẵn sàng</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Log Area -->
+                <div class="card mb-4">
+                    <div class="card-header">
+                        <h5 class="mb-0">Nhật ký hoạt động</h5>
+                    </div>
+                    <div class="card-body">
+                        <div id="logArea"></div>
+                    </div>
+                </div>
+
+                <!-- Results Section -->
+                <div id="resultContainer" class="card mb-4">
+                    <div class="card-header d-flex justify-content-between align-items-center">
+                        <h5 class="mb-0">Kết quả OCR</h5>
+                        <button id="btnCopy" class="btn btn-success">
+                            <i class="bi bi-clipboard"></i> Sao chép
+                        </button>
+                    </div>
+                    <div class="card-body">
+                        <textarea id="resultText" class="form-control" readonly></textarea>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Tab 2: Author Information -->
+            <div class="tab-pane fade" id="author-tab-pane" role="tabpanel" aria-labelledby="author-tab" tabindex="0">
+                <div class="card author-card">
+                    <div class="card-header">
+                        <h4 class="mb-0">Thông tin tác giả</h4>
+                    </div>
+                    <div class="card-body">
+                        <div class="row">
+                            <div class="col-md-4 text-center mb-4 mb-md-0">
+                                <div class="p-3">
+                                    <img src="https://ui-avatars.com/api/?name=Nguyễn+Hữu+Phúc&background=random&size=200" class="img-fluid rounded-circle mb-3" alt="Nguyễn Hữu Phúc">
+                                    <h4>Nguyễn Hữu Phúc</h4>
+                                    <p class="text-muted">Nhà phát triển ứng dụng OCR Image 2025</p>
+                                </div>
+                            </div>
+                            <div class="col-md-8">
+                                <h5>Liên hệ</h5>
+                                <ul class="list-group list-group-flush mb-4">
+                                    <li class="list-group-item d-flex align-items-center">
+                                        <i class="bi bi-phone me-3 text-primary"></i>
+                                        <span>Zalo: <a href="https://zalo.me/0985692879" target="_blank">0985.692.879</a></span>
+                                    </li>
+                                    <li class="list-group-item d-flex align-items-center">
+                                        <i class="bi bi-facebook me-3 text-primary"></i>
+                                        <span>Facebook: <a href="https://www.facebook.com/nhphuclk" target="_blank">facebook.com/nhphuclk</a></span>
+                                    </li>
+                                    <li class="list-group-item d-flex align-items-center">
+                                        <i class="bi bi-globe me-3 text-primary"></i>
+                                        <span>Website: <a href="https://www.aiomtpremium.com" target="_blank">aiomtpremium.com</a></span>
+                                    </li>
+                                    <li class="list-group-item d-flex align-items-center">
+                                        <i class="bi bi-youtube me-3 text-primary"></i>
+                                        <span>Youtube: <a href="https://www.youtube.com/@aiomtpremium" target="_blank">youtube.com/@aiomtpremium</a></span>
+                                    </li>
+                                </ul>
+                                
+                                <h5>Về ứng dụng</h5>
+                                <p>Ứng dụng OCR Image với Server AI giúp nhận diện và trích xuất văn bản từ hình ảnh với độ chính xác cao.</p>
+                                <p>Phiên bản này được triển khai trên nền tảng Vercel, sử dụng công nghệ AI tiên tiến từ Server AI để cung cấp kết quả OCR chất lượng cao.</p>
+                                
+                                <div class="d-flex mt-4">
+                                    <a href="https://www.facebook.com/nhphuclk" target="_blank" class="social-icon" title="Facebook">
+                                        <i class="bi bi-facebook"></i>
+                                    </a>
+                                    <a href="https://www.youtube.com/@aiomtpremium" target="_blank" class="social-icon" title="Youtube">
+                                        <i class="bi bi-youtube"></i>
+                                    </a>
+                                    <a href="https://www.aiomtpremium.com" target="_blank" class="social-icon" title="Website">
+                                        <i class="bi bi-globe"></i>
+                                    </a>
+                                    <a href="https://zalo.me/0985692879" target="_blank" class="social-icon" title="Zalo">
+                                        <i class="bi bi-chat-dots"></i>
+                                    </a>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Toast for copy notification -->
+    <div class="toast align-items-center text-white bg-success" role="alert" aria-live="assertive" aria-atomic="true" id="copyToast">
+        <div class="d-flex">
+            <div class="toast-body">
+                <i class="bi bi-check-circle me-2"></i> Đã sao chép kết quả vào clipboard!
+            </div>
+            <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="Close"></button>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        // Generate hardware ID using browser fingerprinting
+        async function generateHardwareId() {
+            const fpPromise = import('https://openfpcdn.io/fingerprintjs/v3')
+                .then(FingerprintJS => FingerprintJS.load());
+            
+            const fp = await fpPromise;
+            const result = await fp.get();
+
+            // Get some additional browser info
+            const cpuCores = navigator.hardwareConcurrency || '';
+            const platform = navigator.platform || '';
+            const userAgent = navigator.userAgent || '';
+            
+            // Create combined hardware info
+            const hardwareInfo = {
+                cpu_id: result.visitorId + cpuCores,
+                bios_serial: platform + result.visitorId.substring(0, 8),
+                motherboard_serial: userAgent.slice(0, 20) + result.visitorId.substring(8, 16)
+            };
+            
+            // Get hardware ID from server
+            try {
+                const response = await fetch('/api/hardware-id', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(hardwareInfo)
+                });
+                
+                const data = await response.json();
+                if (data.success) {
+                    document.getElementById('hardwareId').value = data.hardware_id;
+                    updateActivationStatus(data.activated);
+                } else {
+                    logMessage('Lỗi: ' + data.error);
+                }
+            } catch (error) {
+                logMessage('Lỗi khi lấy Hardware ID: ' + error);
+            }
+        }
+
+        function updateActivationStatus(activated) {
+            const statusElement = document.getElementById('activationStatus');
+            const fileInput = document.getElementById('imageFile');
+            
+            if (activated) {
+                statusElement.className = 'alert alert-success';
+                statusElement.textContent = 'Trạng thái: ĐÃ KÍCH HOẠT';
+                fileInput.disabled = false;
+                logMessage('Phần mềm đã được kích hoạt, sẵn sàng sử dụng');
+            } else {
+                statusElement.className = 'alert alert-warning';
+                statusElement.textContent = 'Trạng thái: CHƯA KÍCH HOẠT';
+                fileInput.disabled = true;
+                logMessage('Vui lòng kích hoạt phần mềm trước khi sử dụng');
+            }
+        }
+
+        function logMessage(message) {
+            const logArea = document.getElementById('logArea');
+            const timestamp = new Date().toLocaleTimeString();
+            logArea.innerHTML += `<div>[${timestamp}] ${message}</div>`;
+            logArea.scrollTop = logArea.scrollHeight;
+        }
+
+        function updateProgress(percent, message) {
+            const progressBar = document.getElementById('progressBar');
+            const statusText = document.getElementById('statusText');
+            
+            progressBar.style.width = percent + '%';
+            progressBar.textContent = percent + '%';
+            progressBar.setAttribute('aria-valuenow', percent);
+            
+            if (message) {
+                statusText.textContent = message;
+                logMessage(message);
+            }
+        }
+
+        // Check for saved results from localStorage
+        function checkForSavedResults() {
+            try {
+                const savedResultText = localStorage.getItem('lastResultText');
+                
+                if (savedResultText) {
+                    logMessage('Đang khôi phục kết quả OCR từ phiên trước...');
+                    
+                    // Display results
+                    document.getElementById('resultContainer').style.display = 'block';
+                    document.getElementById('resultText').value = savedResultText;
+                    
+                    return true;
+                }
+            } catch (e) {
+                logMessage('Không thể khôi phục kết quả trước đó: ' + e.message);
+            }
+            
+            return false;
+        }
+
+        async function processOCR(formData) {
+            try {
+                updateProgress(10, 'Đang tải file lên...');
+                
+                const response = await fetch('/upload', {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    updateProgress(100, 'Xử lý OCR hoàn tất thành công');
+                    
+                    // Display results
+                    document.getElementById('resultContainer').style.display = 'block';
+                    document.getElementById('resultText').value = result.text;
+                    
+                    // Save to localStorage
+                    try {
+                        localStorage.setItem('lastResultText', result.text);
+                        logMessage('Đã lưu kết quả vào bộ nhớ cục bộ');
+                    } catch (e) {
+                        logMessage('Không thể lưu kết quả vào bộ nhớ cục bộ: ' + e.message);
+                    }
+                    
+                } else {
+                    updateProgress(0, 'Lỗi: ' + result.error);
+                }
+            } catch (error) {
+                updateProgress(0, 'Lỗi xử lý: ' + error);
+            }
+        }
+
+        // Handle pasted image from clipboard
+        function handlePastedImage(e) {
+            // Check if pastable
+            if (!document.getElementById('imageFile').disabled) {
+                const items = (e.clipboardData || e.originalEvent.clipboardData).items;
+                
+                for (let i = 0; i < items.length; i++) {
+                    if (items[i].type.indexOf('image') !== -1) {
+                        const blob = items[i].getAsFile();
+                        const reader = new FileReader();
+                        
+                        reader.onload = function(event) {
+                            const imagePreview = document.getElementById('imagePreview');
+                            imagePreview.src = event.target.result;
+                            imagePreview.style.display = 'block';
+                            
+                            // Create a new file with a proper name
+                            const now = new Date();
+                            const timestamp = now.toISOString().replace(/[:.]/g, '-');
+                            const fileName = `pasted-image-${timestamp}.png`;
+                            
+                            // Create a new File object
+                            const pastedFile = new File([blob], fileName, { type: blob.type });
+                            
+                            // Create a DataTransfer object to simulate a file selection
+                            const dataTransfer = new DataTransfer();
+                            dataTransfer.items.add(pastedFile);
+                            
+                            // Update the file input
+                            const fileInput = document.getElementById('imageFile');
+                            fileInput.files = dataTransfer.files;
+                            
+                            // Update file info and enable process button
+                            const fileInfo = document.getElementById('fileInfo');
+                            fileInfo.textContent = `Đã dán: ${fileName} (${(blob.size / 1024 / 1024).toFixed(2)} MB)`;
+                            document.getElementById('processBtn').disabled = false;
+                            
+                            logMessage(`Hình ảnh đã được dán từ clipboard: ${fileName}`);
+                        };
+                        
+                        reader.readAsDataURL(blob);
+                        return;
+                    }
+                }
+                
+                logMessage('Không tìm thấy hình ảnh trong clipboard');
+            } else {
+                logMessage('Vui lòng kích hoạt phần mềm trước khi dán hình ảnh');
+            }
+        }
+        
+        // Handle drag and drop events for the paste zone
+        function handleDragEvents() {
+            const pasteZone = document.getElementById('pasteZone');
+            
+            // Prevent default drag behaviors
+            ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+                pasteZone.addEventListener(eventName, preventDefaults, false);
+                document.body.addEventListener(eventName, preventDefaults, false);
+            });
+            
+            // Highlight drop zone when item is dragged over
+            ['dragenter', 'dragover'].forEach(eventName => {
+                pasteZone.addEventListener(eventName, highlight, false);
+            });
+            
+            // Remove highlight when item is dragged away
+            ['dragleave', 'drop'].forEach(eventName => {
+                pasteZone.addEventListener(eventName, unhighlight, false);
+            });
+            
+            // Handle dropped files
+            pasteZone.addEventListener('drop', handleDrop, false);
+            
+            function preventDefaults(e) {
+                e.preventDefault();
+                e.stopPropagation();
+            }
+            
+            function highlight() {
+                pasteZone.classList.add('active');
+            }
+            
+            function unhighlight() {
+                pasteZone.classList.remove('active');
+            }
+            
+            function handleDrop(e) {
+                if (document.getElementById('imageFile').disabled) {
+                    logMessage('Vui lòng kích hoạt phần mềm trước khi kéo thả hình ảnh');
+                    return;
+                }
+                
+                const dt = e.dataTransfer;
+                const files = dt.files;
+                
+                if (files && files.length) {
+                    const file = files[0];
+                    
+                    // Check if file is an image
+                    if (!file.type.startsWith('image/')) {
+                        logMessage('Vui lòng chỉ kéo thả file hình ảnh');
+                        return;
+                    }
+                    
+                    // Handle the file similar to file input change
+                    const fileInput = document.getElementById('imageFile');
+                    const dataTransfer = new DataTransfer();
+                    dataTransfer.items.add(file);
+                    fileInput.files = dataTransfer.files;
+                    
+                    // Display image preview
+                    const reader = new FileReader();
+                    reader.onload = function(e) {
+                        const imagePreview = document.getElementById('imagePreview');
+                        imagePreview.src = e.target.result;
+                        imagePreview.style.display = 'block';
+                    }
+                    reader.readAsDataURL(file);
+                    
+                    // Update file info
+                    const fileInfo = document.getElementById('fileInfo');
+                    fileInfo.textContent = `Đã kéo thả: ${file.name} (${(file.size / 1024 / 1024).toFixed(2)} MB)`;
+                    document.getElementById('processBtn').disabled = false;
+                    
+                    logMessage(`File đã được kéo thả: ${file.name}`);
+                }
+            }
+        }
+        
+        // Copy result to clipboard
+        function copyResultToClipboard() {
+            const resultText = document.getElementById('resultText');
+            
+            // Select the text
+            resultText.select();
+            resultText.setSelectionRange(0, 99999); // For mobile devices
+            
+            // Copy the text
+            navigator.clipboard.writeText(resultText.value)
+                .then(() => {
+                    // Show toast
+                    const toast = new bootstrap.Toast(document.getElementById('copyToast'));
+                    toast.show();
+                    
+                    logMessage('Đã sao chép kết quả vào clipboard');
+                })
+                .catch(err => {
+                    logMessage('Lỗi khi sao chép: ' + err);
+                });
+        }
+
+        // Event Listeners
+        document.addEventListener('DOMContentLoaded', function() {
+            generateHardwareId();
+            
+            const uploadForm = document.getElementById('uploadForm');
+            const fileInput = document.getElementById('imageFile');
+            const processBtn = document.getElementById('processBtn');
+            const fileInfo = document.getElementById('fileInfo');
+            const imagePreview = document.getElementById('imagePreview');
+            const btnCopy = document.getElementById('btnCopy');
+            const pasteZone = document.getElementById('pasteZone');
+            
+            // Set up paste event listeners
+            document.addEventListener('paste', handlePastedImage);
+            pasteZone.addEventListener('click', function() {
+                logMessage('Nhấn Ctrl+V để dán hình ảnh từ clipboard');
+            });
+            
+            // Set up drag and drop
+            handleDragEvents();
+            
+            // Check for saved results
+            const hasRestoredResults = checkForSavedResults();
+            if (hasRestoredResults) {
+                logMessage('Đã khôi phục kết quả OCR từ phiên trước');
+            }
+            
+            fileInput.addEventListener('change', function() {
+                if (this.files && this.files[0]) {
+                    const file = this.files[0];
+                    // Check if file is an image
+                    if (!file.type.startsWith('image/')) {
+                        fileInfo.textContent = 'Vui lòng chọn file hình ảnh';
+                        processBtn.disabled = true;
+                        imagePreview.style.display = 'none';
+                        return;
+                    }
+                    
+                    // Display image preview
+                    const reader = new FileReader();
+                    reader.onload = function(e) {
+                        imagePreview.src = e.target.result;
+                        imagePreview.style.display = 'block';
+                    }
+                    reader.readAsDataURL(file);
+                    
+                    fileInfo.textContent = `Đã chọn: ${file.name} (${(file.size / 1024 / 1024).toFixed(2)} MB)`;
+                    processBtn.disabled = false;
+                    logMessage(`File đã chọn: ${file.name}`);
+                } else {
+                    fileInfo.textContent = 'Chưa chọn file nào';
+                    processBtn.disabled = true;
+                    imagePreview.style.display = 'none';
+                }
+            });
+            
+            uploadForm.addEventListener('submit', function(e) {
+                e.preventDefault();
+                
+                if (!fileInput.files || !fileInput.files[0]) {
+                    logMessage('Vui lòng chọn file hình ảnh trước');
+                    return;
+                }
+                
+                const formData = new FormData();
+                formData.append('file', fileInput.files[0]);
+                formData.append('hardware_id', document.getElementById('hardwareId').value);
+                
+                processBtn.disabled = true;
+                updateProgress(0, 'Đang bắt đầu xử lý OCR...');
+                
+                processOCR(formData).finally(() => {
+                    processBtn.disabled = false;
+                });
+            });
+            
+            // Copy button
+            btnCopy.addEventListener('click', function() {
+                copyResultToClipboard();
+            });
+        });
+    </script>
+    <script src="https://openfpcdn.io/fingerprintjs/v3" async></script>
+</body>
+</html>
