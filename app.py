@@ -101,7 +101,7 @@ def get_mineru_token():
 def check_activation(hardware_id):
     """Check if hardware ID is activated"""
     try:
-        url = "https://raw.githubusercontent.com/thayphuctoan/pconvert/refs/heads/main/ocr-trial"
+        url = "https://raw.githubusercontent.com/thayphuctoan/pconvert/refs/heads/main/ocr-image"
         response = requests.get(url, timeout=(10, 30))
         
         if response.status_code == 200:
